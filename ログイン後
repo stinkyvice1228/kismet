@@ -1,0 +1,953 @@
+
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kismet アクションモード モック v8.7</title>
+    <!-- Tailwind CSS CDNを読み込み -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons CDNを読み込み -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Interフォントを使用 -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f9;
+            padding-bottom: 70px; 
+        }
+        .app-container {
+            max-width: 440px; 
+            margin: auto;
+            background-color: white; 
+            min-height: 100vh;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+        }
+        .mode-card {
+            background-color: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            border: 1px solid #f0f0f0;
+        }
+        .mode-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+        }
+        .pink-accent { color: #E91E63; } 
+        .pink-bg { background-color: #E91E63; }
+        .pink-hover:hover { background-color: #C2185B; }
+        .pink-ring:focus { outline: none; box-shadow: 0 0 0 3px rgba(233, 30, 99, 0.4); }
+
+        /* FATEモードのカードスタイル */
+        .fate-card {
+            position: absolute; /* 全てのカードを絶対配置 */
+            width: 100%;
+            height: 450px;
+            background-color: #fff;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            transform: translateX(0) rotate(0deg);
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+            touch-action: none;
+            cursor: grab;
+            user-select: none;
+        }
+        /* 一番上のカードのみvisibleに設定し、スワイプ操作を可能にする */
+        .fate-card:not(:first-child) {
+            z-index: 10;
+        }
+        .fate-card.top-card {
+            z-index: 20;
+        }
+        /* スワイプ後のアニメーションクラス */
+        .fate-card.swiped-left { transform: translateX(-150vw) rotate(-20deg); opacity: 0; }
+        .fate-card.swiped-right { transform: translateX(150vw) rotate(20deg); opacity: 0; }
+        .fate-card-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+        }
+        .fate-card-info {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            padding: 1.5rem;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0));
+            color: white;
+        }
+        /* フッターナビゲーション */
+        .footer-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            max-width: 440px;
+            margin: auto;
+            background-color: white;
+            border-top: 1px solid #eee;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+            z-index: 1000;
+        }
+        .nav-item {
+            color: #888;
+            transition: color 0.15s;
+            padding-top: 0.5rem; 
+            padding-bottom: 0.5rem;
+            height: 60px;
+        }
+        .nav-item.active {
+            color: #E91E63;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app" class="app-container">
+        
+        <!-- ヘッダーエリア -->
+        <header class="pt-8 pb-4 text-center">
+            <h1 class="text-3xl font-black text-gray-900 tracking-tight pink-accent">KISMET</h1>
+            <p class="text-xs text-gray-500 mt-1">あなたが動かす運命の繋がり</p>
+        </header>
+
+        <!-- メインコンテンツラッパー -->
+        <div class="p-4 sm:p-6">
+            
+            <!-- モード選択エリア -->
+            <div id="mode-selection" class="grid grid-cols-3 gap-3 mb-6">
+                <!-- Mode cards will be injected here -->
+            </div>
+
+            <!-- 現在のモード表示 -->
+            <div id="current-mode-status" class="mb-6 text-sm text-center p-3 rounded-xl bg-gray-50 border border-gray-200 cursor-pointer" onclick="window.showModal(currentMode)">
+                <span id="current-mode-text" class="text-gray-600 font-medium">
+                    <!-- 初期値はJSで設定される -->
+                </span>
+            </div>
+
+            <!-- プラン情報 -->
+            <div class="mb-8 p-4 rounded-xl border border-yellow-300 bg-yellow-50 flex justify-between items-center text-sm">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="zap" class="w-5 h-5 text-yellow-600 flex-shrink-0"></i>
+                    <div>
+                        <span class="font-bold text-gray-800">現在のプラン: MOCK FREE</span>
+                        <p class="text-xs text-gray-600">AIメッセージ提案: 本日残り <span id="ai-message-count">99</span> 回</p>
+                    </div>
+                </div>
+                <button class="text-pink-accent font-semibold hover:underline">アップグレード</button>
+            </div>
+
+            <!-- モード別ビューエリア -->
+            <section id="mode-view-container">
+                
+                <h2 id="view-title" class="text-xl font-bold text-gray-700 border-b pb-2 mb-4 flex items-center">
+                    <!-- ビュータイトルはJSで設定される -->
+                </h2>
+
+                <!-- メッセージボックス -->
+                <div id="app-message" class="hidden p-3 mb-4 rounded-lg text-sm font-medium" role="alert"></div>
+
+                <div id="initial-prompt" class="hidden text-center p-10 text-gray-500">
+                    <!-- モードの初期表示/メッセージを表示 -->
+                </div>
+
+                <!-- FATE View (カードスワイプ) -->
+                <div id="fate-view" class="hidden"></div>
+                
+                <!-- マッチングリスト View (メッセージアイコンと連動) -->
+                <div id="match-list-view" class="hidden"></div>
+
+                <!-- AMBITION View -->
+                <div id="ambition-view" class="hidden"></div>
+                
+                <!-- FRIEND View -->
+                <div id="friend-view" class="hidden"></div>
+
+                <!-- Chat View (個別のチャット画面) -->
+                <div id="chat-view" class="hidden"></div>
+                
+            </section>
+        </div>
+
+        <!-- フッターナビゲーション -->
+        <footer class="footer-nav">
+            <div id="footer-nav-container" class="flex justify-around items-center h-full">
+                <!-- ホーム (FATEモード) -->
+                <a href="#" class="nav-item active flex flex-col items-center justify-center flex-grow" onclick="navigateTo('home')">
+                    <i data-lucide="home" class="w-6 h-6"></i>
+                    <span class="text-xs">ホーム</span>
+                </a>
+                <!-- いいね -->
+                <a href="#" class="nav-item flex flex-col items-center justify-center flex-grow" onclick="showAppMessage('いいねタブのダミー表示', 'info'); return false;">
+                    <i data-lucide="heart" class="w-6 h-6"></i>
+                    <span class="text-xs">いいね</span>
+                </a>
+                <!-- メッセージ (保留中マッチングリスト) -->
+                <a href="#" class="nav-item flex flex-col items-center justify-center flex-grow" onclick="navigateTo('message')">
+                    <div class="relative">
+                        <i data-lucide="message-square" class="w-6 h-6"></i>
+                        <span id="match-badge" class="absolute top-[-5px] right-[-5px] bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center hidden">0</span>
+                    </div>
+                    <span class="text-xs">メッセージ</span>
+                </a>
+                <!-- マイページ -->
+                <a href="#" class="nav-item flex flex-col items-center justify-center flex-grow" onclick="showAppMessage('マイページタブのダミー表示', 'info'); return false;">
+                    <i data-lucide="user" class="w-6 h-6"></i>
+                    <span class="text-xs">マイページ</span>
+                </a>
+            </div>
+        </footer>
+
+        <!-- Explanation Modal (Popper) -->
+        <div id="explanation-modal" class="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4 backdrop-blur-sm hidden">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 relative animate-in zoom-in-95 duration-300">
+                
+                <!-- 閉じるボタン -->
+                <button 
+                    id="modal-close-btn"
+                    class="absolute top-3 right-3 p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition duration-150 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    aria-label="閉じる"
+                    onclick="document.getElementById('explanation-modal').classList.add('hidden');"
+                >
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+
+                <div class="flex items-center space-x-3 mb-4">
+                    <div id="modal-icon-container">
+                        <i id="modal-icon-placeholder" class="w-6 h-6"></i>
+                    </div>
+                    <h2 id="modal-title" class="text-2xl font-bold text-gray-800"></h2>
+                </div>
+                
+                <p id="modal-description" class="text-gray-600 mb-6"></p>
+                
+                <div class="flex justify-end">
+                    <button
+                        id="modal-start-btn"
+                        class="px-6 py-2 rounded-lg font-semibold text-white transition shadow-md pink-bg pink-hover"
+                    >
+                        このモードで開始
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ====================================================================
+        // グローバル変数とユーティリティ
+        // ====================================================================
+        let currentMode = 'FATE'; 
+        let currentFateIndex = 0; 
+        const currentUserGender = 'female'; // **このモックのユーザーは女性として設定**
+        let isSwiping = false; 
+        let startX = 0;
+        const SWIPE_THRESHOLD = 100;
+        const ROTATION_FACTOR = 0.2;
+        
+        // マッチング成立後のユーザーを保持するリスト (FATEのみ)
+        let DUMMY_MATCHES = []; 
+
+        /**
+         * アプリケーション全体のメッセージボックスにメッセージを表示
+         */
+        function showAppMessage(message, type = 'info') {
+            const msgBox = document.getElementById('app-message');
+            msgBox.textContent = message;
+            msgBox.classList.remove('hidden', 'bg-blue-100', 'text-blue-800', 'bg-red-100', 'text-red-800', 'bg-green-100', 'text-green-800', 'bg-yellow-100', 'text-yellow-800');
+
+            if (type === 'error') {
+                msgBox.classList.add('bg-red-100', 'text-red-800');
+            } else if (type === 'success') {
+                msgBox.classList.add('bg-green-100', 'text-green-800');
+            } else if (type === 'warning') {
+                msgBox.classList.add('bg-yellow-100', 'text-yellow-800');
+            } else {
+                msgBox.classList.add('bg-blue-100', 'text-blue-800');
+            }
+            msgBox.classList.remove('hidden');
+
+            setTimeout(() => {
+                msgBox.classList.add('hidden');
+            }, 3000);
+        }
+
+        // ====================================================================
+        // ダミーデータ定義
+        // ====================================================================
+        const DUMMY_USERS = [
+            // 男性ユーザー (10人) - FATEモードのマッチング対象
+            { id: 'user_m1', name: 'タケシ', gender: 'male', age: 28, bio: 'テクノロジーと旅行が好きです。新しいアイデアを探しています。', interests: ['Web開発', 'スタートアップ', '旅行', '筋トレ'], ambition: '新しいアプリのアイデア出しを手伝ってくれるデザイナーを探しています！', img: 'https://placehold.co/400x500/A3E635/000000?text=Male+User+1', matched: false },
+            { id: 'user_m2', name: 'リョウ', gender: 'male', age: 31, bio: '歴史と哲学に情熱を注いでいます。', interests: ['歴史', '哲学', '読書'], ambition: '中世ヨーロッパ史に関する知識を共有できる方とディスカッションしたい。', img: 'https://placehold.co/400x500/A3E635/000000?text=Male+User+2', matched: false },
+            { id: 'user_m3', name: 'ケンタ', gender: 'male', age: 24, bio: 'コーヒーと映画が好き。週末はボランティア活動をしています。', interests: ['カフェ', '映画鑑賞', 'ボランティア'], ambition: '今週末の地域清掃活動の参加者（3名）を募集しています！', img: 'https://placehold.co/400x500/A3E635/000000?text=Male+User+3', matched: false },
+            { id: 'user_m4', name: 'ハヤト', gender: 'male', age: 29, bio: '音楽制作が趣味のフリーランスエンジニア。', interests: ['DTM', 'プログラミング', 'アウトドア'], ambition: '私が作った曲に歌詞をつけてくれる作詞家を探しています！ジャンルはロックです。', img: 'https://placehold.co/400x500/A3E635/000000?text=Male+User+4', matched: false },
+            { id: 'user_m5', name: 'シュン', gender: 'male', age: 33, bio: 'カメラマン。風景写真を撮るために全国を回っています。', interests: ['写真', '旅行', '登山'], ambition: '今度行く北海道のロケ地について、地元の方から情報を聞きたい。', img: 'https://placehold.co/400x500/A3E635/000000?text=Male+User+5', matched: false },
+            { id: 'user_m6', name: 'アキラ', gender: 'male', age: 26, bio: 'ゲームとアニメが生きがい。eスポーツ観戦が好き。', interests: ['ゲーム', 'アニメ', 'eスポーツ'], ambition: '新しいゲームの攻略チームを結成したい！週3回活動できる方募集。', img: 'https://placehold.co/400x500/A3E635/000000?text=Male+User+6', matched: false },
+            { id: 'user_m7', name: 'タクヤ', gender: 'male', age: 35, bio: '投資と経済ニュースを毎日チェック。', interests: ['投資', '経済', 'ゴルフ'], ambition: '投資初心者向けの勉強会を企画します。会場設営を手伝ってください。', img: 'https://placehold.co/400x500/A3E635/000000?text=Male+User+7', matched: false },
+            { id: 'user_m8', name: 'ユウジ', gender: 'male', age: 22, bio: '大学でデザインを学んでいます。', interests: ['グラフィックデザイン', 'ファッション', '美術館'], ambition: 'ポートフォリオのデザインについて、プロの意見が欲しいです。', img: 'https://placehold.co/400x500/A3E635/000000?text=Male+User+8', matched: false },
+            { id: 'user_m9', name: 'ダイチ', gender: 'male', age: 30, bio: '料理とDIYが趣味。', interests: ['料理', 'DIY', 'キャンプ'], ambition: '週末にウッドデッキ作成を手伝ってくれる方を募集！ランチ付きです。', img: 'https://placehold.co/400x500/A3E635/000000?text=Male+User+9', matched: false },
+            { id: 'user_m10', name: 'コウキ', gender: 'male', age: 27, bio: '猫好き。たまに詩を書きます。', interests: ['猫', '詩', 'サイクリング'], ambition: '私が書いた詩に、英語の翻訳をつけてくれる方はいませんか？', img: 'https://placehold.co/400x500/A3E635/000000?text=Male+User+10', matched: false },
+
+            // 女性ユーザー (10人) - ダミーデータとして、この中の誰かがcurrentUser
+            { id: 'user_f1', name: 'りょう', gender: 'female', age: 30, bio: 'カフェ巡りと読書が趣味です。新しい友達や刺激的な出会いを探しています！', interests: ['カフェ', '読書', '英語学習', '旅行'], ambition: 'ヨーロッパ旅行のスケジュール作成を手伝って欲しいです。', img: 'https://placehold.co/400x500/F472B6/000000?text=Ryo+(User)', matched: false },
+        ];
+
+        // モード定義
+        const modes = [
+            { id: 'FATE', name: 'FATE', subText: '異性との運命的な出会い', icon: 'heart', description: '異性とのマッチングとメッセージングをシミュレートします。', color: 'pink', iconColor: 'text-pink-600', bgColor: 'bg-pink-50' },
+            { id: 'FRIEND', name: 'FRIEND', subText: '趣味の合う仲間探し', icon: 'users', description: '興味やスキルに基づき、プロフィール一覧からコネクトする流れをシミュレートします。', color: 'blue', iconColor: 'text-blue-600', bgColor: 'bg-blue-50' },
+            { id: 'AMBITION', name: 'AMBITION', subText: 'キャリアや夢を共有', icon: 'briefcase', description: '他のユーザーのリクエスト（Ambition）に応募し、マッチングする流れをシミュレートします。', color: 'purple', iconColor: 'text-purple-600', bgColor: 'bg-purple-50' },
+        ];
+        
+        // ====================================================================
+        // ナビゲーションとビュー管理
+        // ====================================================================
+        const allViews = ['fate-view', 'match-list-view', 'ambition-view', 'friend-view', 'chat-view'];
+        let activeView = 'fate-view'; // 現在表示中のビュー
+
+        /**
+         * 全てのビューを非表示にし、指定されたビューを表示
+         */
+        function switchView(viewId) {
+            allViews.forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(viewId).classList.remove('hidden');
+            activeView = viewId;
+        }
+
+        /**
+         * フッターナビゲーションのクリックハンドラ
+         */
+        window.navigateTo = (target) => {
+            const navItems = document.querySelectorAll('.footer-nav .nav-item');
+            navItems.forEach(item => item.classList.remove('active'));
+
+            if (target === 'home') {
+                // ホームは現在のモードに戻る
+                selectMode(currentMode, false);
+                document.querySelector('.footer-nav .nav-item:nth-child(1)').classList.add('active');
+            } else if (target === 'message') {
+                // メッセージはマッチングリストビューを表示
+                document.getElementById('view-title').textContent = 'メッセージ (保留中のマッチング)';
+                renderMatchListView();
+                switchView('match-list-view');
+                document.querySelector('.footer-nav .nav-item:nth-child(3)').classList.add('active');
+            }
+        };
+
+        /**
+         * モード選択カードをレンダリング
+         */
+        function renderModeCards() {
+            const container = document.getElementById('mode-selection');
+            container.innerHTML = modes.map(mode => `
+                <div 
+                    class="mode-card p-3 flex flex-col items-center text-center text-sm"
+                    data-mode-id="${mode.id}"
+                    onclick="window.showModal('${mode.id}')"
+                >
+                    <div class="p-2 rounded-full ${mode.bgColor} mb-1">
+                        <i data-lucide="${mode.icon}" class="w-5 h-5 ${mode.iconColor}"></i>
+                    </div>
+                    <span class="font-bold text-gray-800">${mode.name}</span>
+                    <span class="text-xs text-gray-500">${mode.subText}</span>
+                </div>
+            `).join('');
+            
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+        /**
+         * モード説明ポップアップを表示
+         */
+        window.showModal = (modeId) => {
+            const mode = modes.find(m => m.id === modeId);
+            if (!mode) return;
+
+            const modal = document.getElementById('explanation-modal');
+
+            // モーダルアイコンを動的に設定
+            const iconPlaceholder = document.getElementById('modal-icon-placeholder');
+            iconPlaceholder.className = `w-6 h-6 ${mode.iconColor}`; 
+            iconPlaceholder.setAttribute('data-lucide', mode.icon); 
+            
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+
+            document.getElementById('modal-title').textContent = mode.name;
+            document.getElementById('modal-description').textContent = mode.description;
+            
+            document.getElementById('modal-start-btn').onclick = () => selectMode(modeId);
+            modal.classList.remove('hidden');
+        };
+
+        /**
+         * モードを確定し、メインビューを切り替え
+         */
+        function selectMode(modeId, hideModal = true) {
+            if (hideModal) {
+                document.getElementById('explanation-modal').classList.add('hidden');
+            }
+            
+            currentMode = modeId;
+            const mode = modes.find(m => m.id === modeId);
+            
+            // ステータス表示の更新
+            document.getElementById('current-mode-text').innerHTML = `
+                現在 **${mode.name}モード** で活動中です。タップしてモードを切り替え/詳細を確認。
+            `;
+            
+            // ビューの切り替え
+            if (modeId === 'FATE') {
+                document.getElementById('view-title').textContent = `FATE マッチング（${currentUserGender === 'female' ? '男性' : '女性'}のみ）`;
+                renderFateView();
+                switchView('fate-view');
+            } else if (modeId === 'AMBITION') {
+                document.getElementById('view-title').textContent = `AMBITION リクエスト一覧`;
+                renderAmbitionView();
+                switchView('ambition-view');
+            } else if (modeId === 'FRIEND') {
+                document.getElementById('view-title').textContent = `FRIEND プロフィール一覧`;
+                renderFriendView();
+                switchView('friend-view');
+            }
+            
+            // ホームに戻る際にフッターのアクティブ状態を再設定
+            document.querySelector('.footer-nav .nav-item:nth-child(1)').classList.add('active');
+            document.querySelector('.footer-nav .nav-item:nth-child(3)').classList.remove('active');
+        }
+
+        // ====================================================================
+        // FATEモード (異性マッチング) - スワイプ機能
+        // ====================================================================
+
+        function renderFateView() {
+            const container = document.getElementById('fate-view');
+            currentFateIndex = 0; 
+
+            // 現在のユーザーと異なる性別のユーザーをフィルタリング
+            window.targetUsers = DUMMY_USERS.filter(u => u.gender !== currentUserGender);
+            
+            if (window.targetUsers.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-10">現在、マッチング可能なユーザーがいません。</p>';
+                return;
+            }
+
+            // カードのHTMLを生成
+            const cardHTML = window.targetUsers.map((user, index) => `
+                <div 
+                    id="fate-card-${user.id}" 
+                    class="fate-card top-0 left-0 w-full ${index === 0 ? 'top-card' : ''}" 
+                    data-user-id="${user.id}"
+                >
+                    <img src="${user.img}" alt="${user.name}" class="fate-card-img">
+                    <div class="fate-card-info">
+                        <h3 class="text-3xl font-bold">${user.name}, ${user.age}</h3>
+                        <p class="text-sm mt-1 mb-3">${user.bio}</p>
+                        <div class="flex flex-wrap gap-2">
+                            ${user.interests.map(i => `<span class="text-xs bg-pink-600/70 px-2 py-0.5 rounded-full">${i}</span>`).join('')}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = `
+                <div class="relative h-[450px] mb-4">
+                    ${cardHTML}
+                </div>
+                <div id="fate-actions" class="flex justify-center space-x-6 pt-4">
+                    <button onclick="handleFateAction(false)" class="p-4 bg-red-100 hover:bg-red-200 text-red-600 rounded-full shadow-lg transition pink-ring">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                    <button onclick="handleFateAction(true)" class="p-4 bg-pink-600 hover:bg-pink-700 text-white rounded-full shadow-lg transition pink-ring">
+                        <i data-lucide="heart" class="w-6 h-6 fill-white"></i>
+                    </button>
+                </div>
+                <p id="fate-status" class="text-center text-sm text-gray-500 mt-6">${window.targetUsers.length}人のユーザーが待機しています。</p>
+            `;
+            
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+            
+            addSwipeListeners();
+        }
+
+        // スワイプイベントロジック（startDrag, drag, endDrag）は前バージョンから変更なし
+        function addSwipeListeners() {
+            const topCard = document.querySelector('.fate-card.top-card');
+            if (!topCard) return;
+
+            // PC/マウス操作用イベント
+            topCard.addEventListener('mousedown', startDrag);
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', endDrag);
+
+            // モバイル/タッチ操作用イベント
+            topCard.addEventListener('touchstart', startDrag);
+            document.addEventListener('touchmove', drag);
+            document.addEventListener('touchend', endDrag);
+        }
+
+        function startDrag(e) {
+            const topCard = document.querySelector('.fate-card.top-card');
+            if (!topCard) return;
+
+            isSwiping = true;
+            topCard.style.transition = 'none'; 
+            startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+            topCard.style.cursor = 'grabbing';
+
+            if (e.type.includes('touch')) {
+                document.body.style.overflowY = 'hidden';
+            }
+        }
+
+        function drag(e) {
+            if (!isSwiping) return;
+
+            const topCard = document.querySelector('.fate-card.top-card');
+            if (!topCard) return;
+
+            const currentX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+            const deltaX = currentX - startX;
+            const maxDrag = topCard.offsetWidth / 2;
+            const rotation = deltaX / maxDrag * 20 * ROTATION_FACTOR;
+            topCard.style.transform = `translateX(${deltaX}px) rotate(${rotation}deg)`;
+
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+        }
+
+        function endDrag(e) {
+            if (!isSwiping) return;
+
+            const topCard = document.querySelector('.fate-card.top-card');
+            if (!topCard) return;
+
+            isSwiping = false;
+            topCard.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out';
+            topCard.style.cursor = 'grab';
+
+            const endX = e.type.includes('mouse') ? e.clientX : (e.changedTouches.length > 0 ? e.changedTouches[0].clientX : startX);
+            const deltaX = endX - startX;
+
+            document.body.style.overflowY = 'auto';
+
+            if (Math.abs(deltaX) > SWIPE_THRESHOLD) {
+                const isLike = deltaX > 0;
+                handleFateAction(isLike, deltaX);
+            } else {
+                topCard.style.transform = 'translateX(0) rotate(0deg)';
+            }
+
+            topCard.removeEventListener('mousedown', startDrag);
+            topCard.removeEventListener('touchstart', startDrag);
+        }
+
+        /**
+         * いいね/スキップボタンが押された、またはスワイプが確定された時の処理
+         * FATEモードの仕様（レディースファースト）を反映
+         */
+        window.handleFateAction = (isLike, deltaX = 0) => {
+            const topCard = document.querySelector('.fate-card.top-card');
+            if (!topCard || currentFateIndex >= window.targetUsers.length) return;
+
+            const directionClass = isLike ? 'swiped-right' : 'swiped-left';
+            
+            if (deltaX === 0) {
+                topCard.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out';
+            }
+            topCard.classList.add(directionClass);
+
+            const currentUser = window.targetUsers[currentFateIndex];
+            
+            setTimeout(() => {
+                topCard.remove();
+
+                if (isLike) {
+                    // 1. マッチングリストへの登録をシミュレート
+                    DUMMY_MATCHES.push({
+                        user: currentUser,
+                        mode: 'FATE',
+                        matchTime: new Date(),
+                        hasSentFirstMessage: false,
+                        isExpired: false
+                    });
+                    
+                    // 2. 成功メッセージの表示 (チャット開始ではなく保留の通知)
+                    showAppMessage(`${currentUser.name}さんとマッチングリストに入りました！メッセージタブを確認してください。`, 'success');
+                    
+                    // 3. マッチバッジの更新
+                    updateMatchBadge();
+
+                } else {
+                    showAppMessage(`${currentUser.name}さんをスキップしました。`, 'info');
+                }
+                
+                // 4. 次のカードへ
+                currentFateIndex++;
+                renderNextCard();
+            }, 300);
+        };
+
+        /**
+         * 次のカードを表示するためのUI更新
+         */
+        function renderNextCard() {
+            const container = document.getElementById('fate-view');
+            
+            if (currentFateIndex >= window.targetUsers.length) {
+                container.innerHTML = `
+                    <div class="text-center p-10 bg-gray-100 rounded-xl">
+                        <i data-lucide="package-search" class="w-10 h-10 text-gray-500 mx-auto mb-4"></i>
+                        <p class="text-lg font-semibold text-gray-700">本日のカードは全て見終わりました。</p>
+                        <p class="text-sm text-gray-500 mt-2">新しいカードが追加されるまで、他のモード（FRIEND/AMBITION）をチェックするか、メッセージタブを確認しましょう！</p>
+                        <button onclick="navigateTo('message')" class="mt-4 px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition">メッセージタブへ</button>
+                    </div>
+                `;
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+                return;
+            }
+
+            const nextCard = document.querySelector('.fate-card');
+            if (nextCard) {
+                nextCard.classList.add('top-card');
+                addSwipeListeners();
+            }
+
+            const remaining = window.targetUsers.length - currentFateIndex;
+            document.getElementById('fate-status').textContent = `${remaining}人のユーザーが待機しています。`;
+        }
+
+        /**
+         * マッチングバッジの更新
+         */
+        function updateMatchBadge() {
+            const badge = document.getElementById('match-badge');
+            const count = DUMMY_MATCHES.filter(m => !m.hasSentFirstMessage && !m.isExpired).length;
+            
+            if (count > 0) {
+                badge.textContent = count;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        // ====================================================================
+        // マッチングリストビュー (メッセージタブに連動)
+        // ====================================================================
+
+        function renderMatchListView() {
+            const container = document.getElementById('match-list-view');
+            
+            if (DUMMY_MATCHES.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center p-10 bg-gray-100 rounded-xl">
+                        <i data-lucide="inbox" class="w-10 h-10 text-gray-500 mx-auto mb-4"></i>
+                        <p class="text-lg font-semibold text-gray-700">保留中のマッチングはありません。</p>
+                        <p class="text-sm text-gray-500 mt-2">FATEモードで「いいね」をして、運命の出会いを待ちましょう！</p>
+                        <button onclick="navigateTo('home')" class="mt-4 px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition">FATEモードへ</button>
+                    </div>
+                `;
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+                return;
+            }
+
+            const matchesHTML = DUMMY_MATCHES.map(match => {
+                const user = match.user;
+                const timeLimitStatus = match.hasSentFirstMessage 
+                    ? `<span class="text-green-600 font-semibold">チャット開始済み</span>`
+                    : currentUserGender === 'female' 
+                        ? `<span class="text-red-600 font-semibold">残り 23時間59分</span><span class="text-xs text-gray-500 block">あなたが最初のメッセージを送れます</span>`
+                        : `<span class="text-red-600 font-semibold">残り 23時間59分</span><span class="text-xs text-gray-500 block">女性からのメッセージを待機中</span>`;
+
+                return `
+                    <div 
+                        class="bg-white p-4 rounded-xl shadow-md border border-gray-100 flex items-center justify-between transition duration-300 hover:bg-pink-50 cursor-pointer"
+                        onclick="renderChatView('${user.id}')"
+                    >
+                        <div class="flex items-center space-x-3">
+                            <img src="${user.img.replace('400x500', '60x60').replace(/\?text=.*$/, '')}" alt="${user.name}" class="w-12 h-12 rounded-full object-cover flex-shrink-0">
+                            <div>
+                                <span class="text-lg font-bold text-gray-800">${user.name}, ${user.age}</span>
+                                <p class="text-sm text-gray-500 mt-0.5">FATEマッチ</p>
+                            </div>
+                        </div>
+                        <div class="text-right text-sm">
+                            ${timeLimitStatus}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <p class="text-gray-600 mb-4 font-semibold">以下のユーザーとマッチングしています。24時間以内にアクションが必要です。</p>
+                <div class="space-y-3">
+                    ${matchesHTML}
+                </div>
+            `;
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+
+        // ====================================================================
+        // チャットビュー (24時間制限ロジックを反映)
+        // ====================================================================
+
+        function renderChatView(userId) {
+            // 他のビューを非表示にし、チャットビューを表示
+            switchView('chat-view'); 
+            
+            const user = DUMMY_USERS.find(u => u.id === userId);
+            const match = DUMMY_MATCHES.find(m => m.user.id === userId);
+
+            if (!user || !match) {
+                showAppMessage("ユーザーデータが見つかりません。", 'error');
+                navigateTo('message');
+                return;
+            }
+
+            // チャット開始制限の判定
+            const isFemale = currentUserGender === 'female';
+            const chatEnabled = match.hasSentFirstMessage || isFemale; // 女性なら常にOK、男性はメッセージが来ていればOK
+
+            const chatView = document.getElementById('chat-view');
+            
+            // 24時間タイマー/ステータス表示
+            let statusHTML;
+            if (match.hasSentFirstMessage) {
+                 statusHTML = `<span class="text-sm font-semibold text-green-700 flex items-center"><i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> チャット開始済み！</span>`;
+            } else if (isFemale) {
+                // 女性: 最初のメッセージを送る必要がある
+                statusHTML = `<span class="text-sm font-semibold text-red-700 flex items-center"><i data-lucide="clock" class="w-4 h-4 mr-1"></i> あなたからのメッセージ待ち: 残り 23時間59分</span>`;
+            } else {
+                // 男性: 女性からのメッセージ待ち
+                statusHTML = `<span class="text-sm font-semibold text-gray-700 flex items-center"><i data-lucide="clock" class="w-4 h-4 mr-1"></i> ${user.name}さんからのメッセージを待機中: 残り 23時間59分</span>`;
+            }
+            
+            // メッセージ入力エリアのHTML
+            const messageInputHTML = isFemale 
+                ? `
+                    <div class="flex space-x-2">
+                        <textarea id="chat-textarea" placeholder="最初のメッセージを入力..." class="flex-grow p-3 border border-gray-300 rounded-xl resize-none h-12 focus:ring-pink-600 focus:border-pink-600"></textarea>
+                        <button onclick="sendFirstMessage('${user.id}')" class="p-3 bg-pink-600 text-white rounded-xl shadow-md hover:bg-pink-700 transition disabled:bg-gray-400">
+                            <i data-lucide="send" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                    `
+                : `
+                    <div class="p-4 bg-gray-100 border border-gray-200 rounded-xl text-center">
+                        <i data-lucide="lock" class="w-5 h-5 text-gray-500 mx-auto mb-2"></i>
+                        <p class="text-sm text-gray-600">チャットは${user.name}さん（女性）からの最初のメッセージでのみ開始されます。</p>
+                        <p class="text-xs text-gray-500 mt-1">メッセージが送信されるまでしばらくお待ちください。</p>
+                    </div>
+                `;
+
+            chatView.innerHTML = `
+                <!-- 簡易ヘッダー -->
+                <div class="border-b pb-4 mb-4 text-center">
+                    <button onclick="navigateTo('message')" class="text-gray-500 hover:text-gray-700 absolute left-4 flex items-center text-sm">
+                         <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                    </button>
+                    <div class="flex items-center justify-center space-x-2">
+                        <span class="text-xl font-bold text-gray-800">${user.name}さんとのチャット</span>
+                        <span class="text-sm px-3 py-1 rounded-full bg-pink-600 text-white font-medium flex items-center">
+                            <i data-lucide="heart" class="w-4 h-4 mr-1 fill-white"></i> FATEマッチ
+                        </span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2 p-1 bg-yellow-50 rounded-lg mx-auto max-w-sm">${statusHTML}</p>
+                </div>
+
+                <!-- メッセージ履歴エリア (未送信/ロック状態をシミュレート) -->
+                <div class="space-y-4 h-64 overflow-y-auto p-2 bg-gray-50 rounded-xl mb-4">
+                    <div class="flex justify-start">
+                        <div class="bg-white text-gray-800 p-3 rounded-xl rounded-bl-none max-w-xs shadow-md border">
+                            <p>${user.name}さんとマッチングが成立しました！</p>
+                            <span class="block text-xs text-gray-500 text-left mt-1">マッチ成立時</span>
+                        </div>
+                    </div>
+                    <!-- 女性がメッセージを送っていない場合、これ以降の履歴は非表示 -->
+                    ${match.hasSentFirstMessage ? 
+                        `<div class="flex justify-end">
+                            <div class="bg-pink-600 text-white p-3 rounded-xl rounded-br-none max-w-xs shadow-md">
+                                <p>最初のメッセージ！よろしくお願いいたします。</p>
+                                <span class="block text-xs text-white/80 text-right mt-1">送信済み</span>
+                            </div>
+                        </div>` :
+                        `<div class="text-center p-4 text-gray-500">
+                            <i data-lucide="message-square-off" class="w-6 h-6 mx-auto mb-1"></i>
+                            <p class="text-sm">${isFemale ? 'あなたが最初のメッセージを送るまで、チャット履歴は表示されません。' : 'チャットが開始されていません。'}</p>
+                        </div>`
+                    }
+                </div>
+
+                <!-- メッセージ入力エリア -->
+                ${messageInputHTML}
+                
+                <button onclick="navigateTo('home')" class="mt-6 w-full py-2 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition">
+                    モード選択に戻る (現在の ${currentMode} モード)
+                </button>
+            `;
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+        /**
+         * 女性が最初のメッセージを送った際の処理
+         */
+        window.sendFirstMessage = (userId) => {
+            const match = DUMMY_MATCHES.find(m => m.user.id === userId);
+            const textarea = document.getElementById('chat-textarea');
+            
+            if (!match || currentUserGender !== 'female') return;
+            
+            if (textarea.value.trim() === '') {
+                showAppMessage('メッセージを入力してください。', 'warning');
+                return;
+            }
+
+            match.hasSentFirstMessage = true;
+            showAppMessage(`${match.user.name}さんへの最初のメッセージを送信しました！チャットが開始されます。`, 'success');
+            
+            // チャットビューを更新して、制限を解除し、メッセージ履歴を表示する
+            renderChatView(userId);
+            updateMatchBadge();
+        };
+
+
+        // ====================================================================
+        // FRIEND/AMBITIONビュー (変更なし)
+        // ====================================================================
+
+        function renderFriendView() {
+            const container = document.getElementById('friend-view');
+            const profilesHTML = DUMMY_USERS.map(user => `
+                <div id="friend-profile-${user.id}" class="bg-white p-4 rounded-xl shadow-md border border-gray-100 flex items-start space-x-4 transition duration-300 hover:shadow-lg">
+                    <img src="${user.img.replace('400x500', '80x80').replace(/\?text=.*$/, '')}" alt="${user.name}" class="w-20 h-20 rounded-lg object-cover flex-shrink-0">
+                    <div class="flex-grow">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-lg font-bold text-gray-800">${user.name}, ${user.age}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full ${user.gender === 'male' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}">
+                                ${user.gender === 'male' ? '男性' : '女性'}
+                            </span>
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1">${user.bio.substring(0, 50)}...</p>
+                        <div class="flex flex-wrap gap-1 mt-2">
+                            ${user.interests.map(i => `<span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">${i}</span>`).join('')}
+                        </div>
+                        <button onclick="handleFriendConnect('${user.id}', '${user.name}')" class="mt-3 text-blue-600 hover:text-blue-800 font-semibold text-sm flex items-center transition">
+                            <i data-lucide="send" class="w-4 h-4 mr-1"></i> コネクト申請 (ダミー)
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = `
+                <p class="text-gray-600 mb-4">趣味やスキルが共通の仲間を探しましょう。</p>
+                <div class="space-y-4">
+                    ${profilesHTML}
+                </div>
+            `;
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+        window.handleFriendConnect = (userId, userName) => {
+            const user = DUMMY_USERS.find(u => u.id === userId);
+            DUMMY_MATCHES.push({
+                user: user,
+                mode: 'FRIEND',
+                matchTime: new Date(),
+                hasSentFirstMessage: true, // FRIENDモードは即チャット開始
+                isExpired: false
+            });
+            updateMatchBadge();
+            showAppMessage(`${userName}さんにコネクト申請を送りました。即座にマッチングが成立し、チャット可能です。`, 'success');
+            renderMatchListView(); // マッチリストに遷移
+            switchView('match-list-view');
+        }
+
+        function renderAmbitionView() {
+            const container = document.getElementById('ambition-view');
+            const ambitionUsers = DUMMY_USERS.filter(u => u.ambition);
+
+            const ambitionHTML = ambitionUsers.map(user => `
+                <div id="ambition-request-${user.id}" class="bg-white p-4 rounded-xl shadow-md border border-purple-100">
+                    <div class="flex items-center space-x-3 mb-2">
+                        <img src="${user.img.replace('400x500', '40x40').replace(/\?text=.*$/, '')}" alt="${user.name}" class="w-10 h-10 rounded-full object-cover">
+                        <div>
+                            <span class="font-bold text-gray-800">${user.name}, ${user.age}</span>
+                            <p class="text-xs text-gray-500">${user.gender === 'male' ? '男性' : '女性'} / ${user.interests[0]}</p>
+                        </div>
+                    </div>
+                    <p class="text-sm font-medium text-gray-700 bg-purple-50 p-3 rounded-lg border border-purple-200 whitespace-pre-wrap">
+                        ${user.ambition}
+                    </p>
+                    <button onclick="handleAmbitionAction('${user.id}', '${user.name}')" class="mt-3 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center text-sm">
+                        <i data-lucide="zap" class="w-4 h-4 mr-1 fill-white"></i> 手伝います/アクション (ダミー)
+                    </button>
+                </div>
+            `).join('');
+
+            container.innerHTML = `
+                <p class="text-gray-600 mb-4">他のユーザーの夢や目標を達成するために、あなたができるアクションを見つけましょう。</p>
+                <div class="space-y-4">
+                    ${ambitionHTML}
+                </div>
+            `;
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+        window.handleAmbitionAction = (userId, userName) => {
+            const user = DUMMY_USERS.find(u => u.id === userId);
+            DUMMY_MATCHES.push({
+                user: user,
+                mode: 'AMBITION',
+                matchTime: new Date(),
+                hasSentFirstMessage: true, // AMBITIONモードは即チャット開始
+                isExpired: false
+            });
+            updateMatchBadge();
+            showAppMessage(`${userName}さんのリクエストにアクションしました。即座にマッチングが成立し、チャット可能です。`, 'success');
+            renderMatchListView(); // マッチリストに遷移
+            switchView('match-list-view');
+        }
+        
+        // ====================================================================
+        // アプリケーション開始
+        // ====================================================================
+        window.onload = () => {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+
+            renderModeCards(); 
+            
+            // FATEモードを初期表示
+            selectMode(currentMode, false);
+            updateMatchBadge(); // 初期バッジを更新
+        };
+    </script>
+</body>
+</html>
